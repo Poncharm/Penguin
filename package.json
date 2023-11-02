@@ -1,7 +1,8 @@
 {
-  "name": "$name$",
-  "version": "$version$",
+  "name": "PenguinsCanFly",
+  "version": "1.0.0",
+  "author": "Anton Belokopytov",
+  "main_script": "main.py",
   "dependencies": {
-    $END$
   }
 }

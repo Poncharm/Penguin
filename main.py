@@ -1,270 +1,155 @@
 # Remaking Jetpack Joyride in Python!
 
+# External libs
 import random
 import pygame
 
-pygame.init()
+# Local modules
+from lsl_handler import LSLHandler
+from character import Character
+from background import Background
+from ui import UI
+from obstacles import Obstacles
+from game_settings import *
 
-WIDTH = 1000
-HEIGHT = 600
+pygame.init()
+pygame.mixer.init()
+
+songs_list = [
+    'Resources\\sounds\\1.mp3',
+    'Resources\\sounds\\2.mp3',
+    'Resources\\sounds\\3.mp3',
+    'Resources\\sounds\\4.mp3'
+]
+current_song_index = 0
+
+engine_sound_path = 'Resources/sounds/4.mp3'
+engine_sound = pygame.mixer.Sound(engine_sound_path)
+
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
-surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 pygame.display.set_caption('Jetpack Joyride Remake in Python!')
-fps = 60
 timer = pygame.time.Clock()
 font = pygame.font.Font('freesansbold.ttf', 32)
-bg_color = (128, 128, 128)
-lines = [0, WIDTH / 4, 2 * WIDTH / 4, 3 * WIDTH / 4]
-game_speed = 3
-pause = False
-init_y = HEIGHT - 130
-player_y = init_y
-booster = False
-counter = 0
-y_velocity = 0
-gravity = 0.4
-new_laser = True
-laser = []
-distance = 0
-restart_cmd = False
-new_bg = 0
 
-# rocket variables
-rocket_counter = 0
-rocket_active = False
-rocket_delay = 0
-rocket_coords = []
+background = Background(screen, WIDTH, HEIGHT)
+background.initialize_forest("Resources/background/forest")
+background.initialize_sky1("Resources/background/clouds/clouds 1")
+background.initialize_sky2("Resources/background/clouds/clouds 2")
+background.initialize_sky3("Resources/background/clouds/clouds 3")
+background.initialize_sky4("Resources/background/clouds/clouds 4")
+background.initialize_sky5("Resources/background/clouds/clouds 5")
 
-# load in player info in beginning
-file = open('player_info.txt', 'r')
-read = file.readlines()
-high_score = int(read[0])
-lifetime = int(read[1])
-file.close()
+lsl_handler = LSLHandler()
+user_interface = UI(screen, lsl_handler)
 
+penguin = Character(screen, INIT_Y, init_x)
+coin = Obstacles(coin_width, screen, game_speed, WIDTH, HEIGHT, font)
 
-# all the code to move lines across screen and draw bg images
-def draw_screen(line_list, lase):
-    screen.fill('black')
-    pygame.draw.rect(surface, (bg_color[0], bg_color[1], bg_color[2], 50), [0, 0, WIDTH, HEIGHT])
-    screen.blit(surface, (0, 0))
-    top = pygame.draw.rect(screen, 'gray', [0, 0, WIDTH, 50])
-    bot = pygame.draw.rect(screen, 'gray', [0, HEIGHT - 50, WIDTH, 50])
-    for i in range(len(line_list)):
-        pygame.draw.line(screen, 'black', (line_list[i], 0), (line_list[i], 50), 3)
-        pygame.draw.line(screen, 'black', (line_list[i], HEIGHT - 50), (line_list[i], HEIGHT), 3)
-        if not pause:
-            line_list[i] -= game_speed
-            lase[0][0] -= game_speed
-            lase[1][0] -= game_speed
-        if line_list[i] < 0:
-            line_list[i] = WIDTH
-    lase_line = pygame.draw.line(screen, 'yellow', (lase[0][0], lase[0][1]), (lase[1][0], lase[1][1]), 10)
-    pygame.draw.circle(screen, 'yellow', (lase[0][0], lase[0][1]), 12)
-    pygame.draw.circle(screen, 'yellow', (lase[1][0], lase[1][1]), 12)
-    screen.blit(font.render(f'Distance: {int(distance)} m', True, 'white'), (10, 10))
-    screen.blit(font.render(f'High Score: {int(high_score)} m', True, 'white'), (10, 70))
-    return line_list, top, bot, lase, lase_line
+pygame.mixer.music.load(songs_list[current_song_index])
+pygame.mixer.music.play()
 
+last_keypress_time = 0
+record = 0
 
-# draw player including animated states
-def draw_player():
-    play = pygame.rect.Rect((120, player_y + 10), (25, 60))
-    # pygame.draw.rect(screen, 'green', play, 5)
-    if player_y < init_y or pause:
-        if booster:
-            pygame.draw.ellipse(screen, 'red', [100, player_y + 50, 20, 30])
-            pygame.draw.ellipse(screen, 'orange', [105, player_y + 50, 10, 30])
-            pygame.draw.ellipse(screen, 'yellow', [110, player_y + 50, 5, 30])
-        pygame.draw.rect(screen, 'yellow', [128, player_y + 60, 10, 20], 0, 3)
-        pygame.draw.rect(screen, 'orange', [130, player_y + 60, 10, 20], 0, 3)
-    else:
-        if counter < 10:
-            pygame.draw.line(screen, 'yellow', (128, player_y + 60), (140, player_y + 80), 10)
-            pygame.draw.line(screen, 'orange', (130, player_y + 60), (120, player_y + 80), 10)
-        elif 10 <= counter < 20:
-            pygame.draw.rect(screen, 'yellow', [128, player_y + 60, 10, 20], 0, 3)
-            pygame.draw.rect(screen, 'orange', [130, player_y + 60, 10, 20], 0, 3)
-        elif 20 <= counter < 30:
-            pygame.draw.line(screen, 'yellow', (128, player_y + 60), (120, player_y + 80), 10)
-            pygame.draw.line(screen, 'orange', (130, player_y + 60), (140, player_y + 80), 10)
-        else:
-            pygame.draw.rect(screen, 'yellow', [128, player_y + 60, 10, 20], 0, 3)
-            pygame.draw.rect(screen, 'orange', [130, player_y + 60, 10, 20], 0, 3)
-    # jetpack, body and head
-    pygame.draw.rect(screen, 'white', [100, player_y + 20, 20, 30], 0, 5)
-    pygame.draw.ellipse(screen, 'orange', [120, player_y + 20, 30, 50])
-    pygame.draw.circle(screen, 'orange', (135, player_y + 15), 10)
-    pygame.draw.circle(screen, 'black', (138, player_y + 12), 3)
-    return play
-
-
-def check_colliding():
-    coll = [False, False]
-    rstrt = False
-    if player.colliderect(bot_plat):
-        coll[0] = True
-    elif player.colliderect(top_plat):
-        coll[1] = True
-    if laser_line.colliderect(player):
-        rstrt = True
-    if rocket_active:
-        if rocket.colliderect(player):
-            rstrt = True
-    return coll, rstrt
-
-
-def generate_laser():
-    # 0 - horiz, 1 - vert
-    laser_type = random.randint(0, 1)
-    offset = random.randint(10, 300)
-    match laser_type:
-        case 0:
-            laser_width = random.randint(100, 300)
-            laser_y = random.randint(100, HEIGHT - 100)
-            new_lase = [[WIDTH + offset, laser_y], [WIDTH + offset + laser_width, laser_y]]
-        case 1:
-            laser_height = random.randint(100, 300)
-            laser_y = random.randint(100, HEIGHT - 400)
-            new_lase = [[WIDTH + offset, laser_y], [WIDTH + offset, laser_y + laser_height]]
-    return new_lase
-
-
-def draw_rocket(coords, mode):
-    if mode == 0:
-        rock = pygame.draw.rect(screen, 'dark red', [coords[0] - 60, coords[1] - 25, 50, 50], 0, 5)
-        screen.blit(font.render('!', True, 'black'), (coords[0] - 40, coords[1] - 20))
-        if not pause:
-            if coords[1] > player_y + 10:
-                coords[1] -= 3
-            else:
-                coords[1] += 3
-    else:
-        rock = pygame.draw.rect(screen, 'red', [coords[0], coords[1] - 10, 50, 20], 0, 5)
-        pygame.draw.ellipse(screen, 'orange', [coords[0] + 50, coords[1] - 10, 50, 20], 7)
-        if not pause:
-            coords[0] -= 10 + game_speed
-
-    return coords, rock
-
-
-def draw_pause():
-    pygame.draw.rect(surface, (128, 128, 128, 150), [0, 0, WIDTH, HEIGHT])
-    pygame.draw.rect(surface, 'dark gray', [200, 150, 600, 50], 0, 10)
-    surface.blit(font.render('Game Paused. Escape Btn Resumes', True, 'black'), (220, 160))
-    restart_btn = pygame.draw.rect(surface, 'white', [200, 220, 280, 50], 0, 10)
-    surface.blit(font.render('Restart', True, 'black'), (220, 230))
-    quit_btn = pygame.draw.rect(surface, 'white', [520, 220, 280, 50], 0, 10)
-    surface.blit(font.render('Quit', True, 'black'), (540, 230))
-    pygame.draw.rect(surface, 'dark gray', [200, 300, 600, 50], 0, 10)
-    surface.blit(font.render(f'Lifetime Distance Ran: {int(lifetime)}', True, 'black'), (220, 310))
-    screen.blit(surface, (0, 0))
-    return restart_btn, quit_btn
-
-
-def modify_player_info():
-    global high_score, lifetime
-    if distance > high_score:
-        high_score = distance
-    lifetime += distance
-    file = open('player_info.txt', 'w')
-    file.write(str(int(high_score)) + '\n')
-    file.write(str(int(lifetime)))
-    file.close()
-
-
-run = True
-while run:
+while RUN:
     timer.tick(fps)
-    if counter < 40:
-        counter += 1
-    else:
-        counter = 0
-    if new_laser:
-        laser = generate_laser()
-        new_laser = False
-    lines, top_plat, bot_plat, laser, laser_line = draw_screen(lines, laser)
-    if pause:
-        restart, quits = draw_pause()
+    events = pygame.event.get()
 
-    if not rocket_active and not pause:
-        rocket_counter += 1
-    if rocket_counter > 180:
-        rocket_counter = 0
-        rocket_active = True
-        rocket_delay = 0
-        rocket_coords = [WIDTH, HEIGHT/2]
-    if rocket_active:
-        if rocket_delay < 90:
-            if not pause:
-                rocket_delay += 1
-            rocket_coords, rocket = draw_rocket(rocket_coords, 0)
-        else:
-            rocket_coords, rocket = draw_rocket(rocket_coords, 1)
-        if rocket_coords[0] < -50:
-            rocket_active = False
-
-    player = draw_player()
-    colliding, restart_cmd = check_colliding()
-
-    for event in pygame.event.get():
+    for event in events:
         if event.type == pygame.QUIT:
-            modify_player_info()
-            run = False
+            RUN = False
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                if pause:
-                    pause = False
-                else:
-                    pause = True
-            if event.key == pygame.K_SPACE and not pause:
-                booster = True
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_SPACE:
-                booster = False
-        if event.type == pygame.MOUSEBUTTONDOWN and pause:
-            if restart.collidepoint(event.pos):
-                restart_cmd = True
-            if quits.collidepoint(event.pos):
-                modify_player_info()
-                run = False
+            current_time = pygame.time.get_ticks()
+            if event.key == pygame.K_ESCAPE and current_time - last_keypress_time > KEYPRESS_DELAY:
+                if GAME_STATE == 'game':
+                    GAME_STATE = 'menu'
+                elif GAME_STATE == 'menu':
+                    GAME_STATE = 'game'
+                last_keypress_time = current_time
 
-    if not pause:
-        distance += game_speed
-        if booster:
-            y_velocity -= gravity
+    if GAME_STATE == 'game':
+        if not pygame.mixer.music.get_busy():  # Если музыка не играет
+            current_song_index += 1  # move to the next song
+            if current_song_index >= len(songs_list):  # if we've reached the end of the list, start over
+                current_song_index = 0
+            pygame.mixer.music.load(songs_list[current_song_index])
+            pygame.mixer.music.play()
+
+        new_fire_rate = lsl_handler.get_current_fire_rate()
+        if new_fire_rate is not None:
+            fire_rate = new_fire_rate
+            engine_sound.set_volume(fire_rate*0.8)  # Устанавливаем громкость звука двигателя на основе fire_rate
+
+        # Counter Logic
+        if counter < 40:
+            counter += 1
         else:
-            y_velocity += gravity
-        if (colliding[0] and y_velocity > 0) or (colliding[1] and y_velocity < 0):
-            y_velocity = 0
-        player_y += y_velocity
+            counter = 0
 
-    # progressive speed increases
-    if distance < 50000:
-        game_speed = 1 + (distance // 500) / 10
-    else:
-        game_speed = 11
+        # Booster Logic
+        if not pause:
+            if fire_rate > 0:
+                booster = True
+            else:
+                booster = False
 
-    if laser[0][0] < 0 and laser[1][0] < 0:
-        new_laser = True
+            if fire_rate >= 1:
+                max_height = 0
+            else:
+                max_height = INIT_Y*(1 - fire_rate)
 
-    if distance - new_bg > 500:
-        new_bg = distance
-        bg_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            if player_y > max_height + (fire_rate * 4 + 1):
+                y_velocity = -fire_rate * 4
 
-    if restart_cmd:
-        modify_player_info()
-        distance = 0
-        rocket_active = False
-        rocket_counter = 0
-        pause = False
-        player_y = init_y
-        y_velocity = 0
-        restart_cmd = 0
-        new_laser = True
+            elif player_y < max_height - (fire_rate * 4 + 1):
+                y_velocity = (1 - fire_rate) * 4
 
-    if distance > high_score:
-        high_score = int(distance)
+            elif abs(player_y-max_height) <= fire_rate * 4 + 1:
+                y_velocity = 0
+
+            background_shift_y = 0
+            if (player_y >= INIT_Y - HEIGHT//4) and (background.y['forest'] > 0):
+                background_shift_y = -4
+
+            elif player_y <= 20:
+                background_shift_y = fire_rate * 4
+
+            background.y['forest'] += background_shift_y
+            background.y['sky1'] += background_shift_y
+            background.y['sky2'] += background_shift_y
+            background.y['sky3'] += background_shift_y
+            background.y['sky4'] += background_shift_y
+            background.y['sky5'] += background_shift_y
+
+            player_y += y_velocity
+
+        # Drawings
+        background.draw_screen()
+        background.display_lsl_info(lsl_value=fire_rate)
+
+        if record < -(player_y - INIT_Y) + background.y['forest']: record = -(player_y - INIT_Y) + background.y['forest']
+        background.display_height(font, record)
+
+        player = penguin.draw_penguin(player_y, fire_rate, booster, background.y['forest'], INIT_Y, counter)
+
+        # Coin Logic
+        if random.randint(1, 100) <= COIN_GENERATION_CHANCE:
+            coin.generate_coin()
+        coin.move_coin(background_shift_y)  # pass the background shift to the move_coin method
+        coin.check_coin_collection(player)
+        coin.draw_coin()
+        coin.draw_score()
+
+    elif GAME_STATE == 'menu':
+        pygame.mixer.music.pause()
+        engine_sound.stop()
+        RUN, CHANNEL = user_interface.draw_pause(events)
+        if CHANNEL:  # Check if a new channel was selected
+            lsl_handler.set_stream(CHANNEL)  # Set the new stream
+            if not lsl_handler.is_running():  # Only start if it isn't already running
+                lsl_handler.start()
 
     pygame.display.flip()
+
+lsl_handler.stop()
 pygame.quit()

@@ -1,2 +1,2 @@
-![image](https://github.com/Poncharm/Penguin/assets/116403026/5849d4e8-e8b2-4d10-a542-fa5dc9a935d8)
+![image](https://github.com/Poncharm/Penguin/assets/116403026/625c8ea9-3527-42b0-a269-a614ccf33851)
 # Penguin
